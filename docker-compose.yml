@@ -1,0 +1,19 @@
+version: "3"
+
+networks:
+  galaxydb-network:
+    name: galaxydb-network
+    driver: bridge
+
+services:
+  loadbalancer:
+    build: "./loadbalancer"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./server:/server
+    image: galaxydb-lb
+    ports:
+      - "5000:5000"
+    privileged: true
+    networks:
+      - galaxydb-network

@@ -16,7 +16,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"github.com/Sarita-Singh/galaxyDB/loadbalancer/internal/consistenthashmap"
+	"github.com/yatharthsameer/galaxydb/loadbalancer/internal/consistenthashmap"
 )
 
 var (

@@ -1,4 +1,4 @@
-module github.com/Sarita-Singh/galaxyDB/loadbalancer
+module github.com/yatharthsameer/galaxydb/loadbalancer
 
 go 1.21.0
 

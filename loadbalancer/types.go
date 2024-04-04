@@ -3,7 +3,7 @@ package main
 import (
 	"sync"
 
-	"github.com/Sarita-Singh/galaxyDB/loadbalancer/internal/consistenthashmap"
+	"github.com/yatharthsameer/galaxydb/loadbalancer/internal/consistenthashmap"
 )
 
 type ShardTConfig struct {

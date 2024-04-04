@@ -1,4 +1,4 @@
-module github.com/Sarita-Singh/galaxyDB/server
+module github.com/yatharthsameer/galaxydb/server
 
 go 1.21.0
 

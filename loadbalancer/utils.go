@@ -132,7 +132,7 @@ func chooseRandomServerForRemoval(serverIDs []int, serverIDsRemoved []int) int {
 }
 
 func getShardIDFromStudID(db *sql.DB, studID int) string {
-	row, err := db.Query("SELECT shard_id FROM shardt WHERE ? BETWEEN stud_id_low AND stud_id_low+shard_size", studID)
+	row, err := db.Query("SELECT shard_id FROM shardt WHERE $1 BETWEEN stud_id_low AND stud_id_low+shard_size", studID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func getShardIDFromStudID(db *sql.DB, studID int) string {
 }
 
 func getValidIDx(db *sql.DB, shardID string) int {
-	row, err := db.Query("SELECT valid_idx FROM shardt WHERE shard_id=?", shardID)
+	row, err := db.Query("SELECT valid_idx FROM shardt WHERE shard_id=$1", shardID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func getValidIDx(db *sql.DB, shardID string) int {
 }
 
 func getServerIDsForShard(db *sql.DB, shardID string) []int {
-	row, err := db.Query("SELECT server_id FROM mapt WHERE shard_id=?", shardID)
+	row, err := db.Query("SELECT server_id FROM mapt WHERE shard_id=$1", shardID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func replaceServerInstance(downServerID int) {
 	fmt.Printf("Restarting Server%d as Server%d\n", downServerID, newServerID)
 	spawnNewServerInstance(fmt.Sprintf("Server%d", newServerID), newServerID)
 
-	rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id=?", downServerID)
+	rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id=$1", downServerID)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func replaceServerInstance(downServerID int) {
 		shardTConfigs[shardID].mutex.Unlock()
 	}
 
-	_, err = db.Exec("UPDATE mapt SET server_id=? WHERE server_id=?", newServerID, downServerID)
+	_, err = db.Exec("UPDATE mapt SET server_id=$1 WHERE server_id=$2", newServerID, downServerID)
 	if err != nil {
 		log.Println("Error updating mapt: ", err)
 	}

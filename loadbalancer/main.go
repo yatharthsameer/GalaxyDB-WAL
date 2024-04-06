@@ -14,7 +14,7 @@ import (
 	"sync"
 	"syscall"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq"
 
 	"github.com/yatharthsameer/galaxydb/loadbalancer/internal/consistenthashmap"
 )
@@ -40,7 +40,7 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 		serverID := getServerID(rawServerName)
 
 		for _, shardID := range shardIDs {
-			_, err := db.Exec("INSERT INTO mapt (shard_id, server_id) VALUES (?, ?);", shardID, serverID)
+			_, err := db.Exec("INSERT INTO mapt (shard_id, server_id) VALUES ($1, $2);", shardID, serverID)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -54,7 +54,7 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, shard := range req.Shards {
-		_, err := db.Exec("INSERT INTO shardt (stud_id_low, shard_id, shard_size, valid_idx) VALUES (?, ?, ?, ?);", shard.StudIDLow, shard.ShardID, shard.ShardSize, 0)
+		_, err := db.Exec("INSERT INTO shardt (stud_id_low, shard_id, shard_size, valid_idx) VALUES ($1, $2, $3, $4);", shard.StudIDLow, shard.ShardID, shard.ShardSize, 0)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -65,7 +65,7 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 		shardTConfigs[shard.ShardID] = config
 
 		shardTConfigs[shard.ShardID].chm.Init()
-		rows, err := db.Query("SELECT server_id FROM mapt WHERE shard_id = ?;", shard.ShardID)
+		rows, err := db.Query("SELECT server_id FROM mapt WHERE shard_id = $1;", shard.ShardID)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -93,7 +93,7 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		serverName := fmt.Sprintf("Server%d", serverID)
 		servers[serverName] = []string{}
 
-		rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id = ?;", serverID)
+		rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id = $1;", serverID)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -162,7 +162,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 		serverIDsAdded = append(serverIDsAdded, serverID)
 
 		for _, shardID := range shardIDs {
-			_, err := db.Exec("INSERT INTO mapt (shard_id, server_id) VALUES (?, ?);", shardID, serverID)
+			_, err := db.Exec("INSERT INTO mapt (shard_id, server_id) VALUES ($1, $2);", shardID, serverID)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -176,7 +176,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, shard := range req.NewShards {
-		_, err := db.Exec("INSERT INTO shardt (stud_id_low, shard_id, shard_size, valid_idx) VALUES (?, ?, ?, ?);", shard.StudIDLow, shard.ShardID, shard.ShardSize, 0)
+		_, err := db.Exec("INSERT INTO shardt (stud_id_low, shard_id, shard_size, valid_idx) VALUES ($1, $2, $3, $4);", shard.StudIDLow, shard.ShardID, shard.ShardSize, 0)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -187,7 +187,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 		shardTConfigs[shard.ShardID] = config
 
 		shardTConfigs[shard.ShardID].chm.Init()
-		rows, err := db.Query("SELECT server_id FROM mapt WHERE shard_id = ?;", shard.ShardID)
+		rows, err := db.Query("SELECT server_id FROM mapt WHERE shard_id = $1;", shard.ShardID)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -259,7 +259,7 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 
 	for _, serverIDRemoved := range serverIDsRemoved {
 		shardIDsRemoved := []string{}
-		rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id = ?;", serverIDRemoved)
+		rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id = $1;", serverIDRemoved)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -278,7 +278,7 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 			shardTConfigs[shardIDRemoved].chm.RemoveServer(serverIDRemoved)
 		}
 
-		_, err = db.Exec("DELETE FROM mapt WHERE server_id = ?;", serverIDRemoved)
+		_, err = db.Exec("DELETE FROM mapt WHERE server_id = $1;", serverIDRemoved)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -333,7 +333,7 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shardIDsQueried := []string{}
-	rows, err := db.Query("SELECT shard_id FROM shardt WHERE (stud_id_low BETWEEN ? AND ?) OR (stud_id_low+shard_size BETWEEN ? AND ?);", req.StudID.Low, req.StudID.High, req.StudID.Low, req.StudID.High)
+	rows, err := db.Query("SELECT shard_id FROM shardt WHERE (stud_id_low BETWEEN $1 AND $2) OR (stud_id_low+shard_size BETWEEN $1 AND $2);", req.StudID.Low, req.StudID.High)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -448,7 +448,7 @@ func WriteHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		_, err = db.Exec("UPDATE shardt SET valid_idx = ? WHERE shard_id = ?;", currentIndex+len(studData), shardID)
+		_, err = db.Exec("UPDATE shardt SET valid_idx = $1 WHERE shard_id = $2;", currentIndex+len(studData), shardID)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -579,21 +579,14 @@ func main() {
 
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	_, err := os.Stat(DB_FILENAME)
-	if err == nil {
-		err = os.Remove(DB_FILENAME)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	db, err = sql.Open("sqlite3", DB_FILENAME)
+	var err error
+	db, err = sql.Open("postgres", DB_CONNECTION_STRING)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	_, err = db.Exec(INIT_DB)
+	err = db.Ping()
 	if err != nil {
 		log.Fatal(err)
 	}

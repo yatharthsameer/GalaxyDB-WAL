@@ -1,12 +1,23 @@
-version: "3"
-
 networks:
   galaxydb-network:
     name: galaxydb-network
     driver: bridge
 
 services:
-  loadbalancer:
+  galaxydb-metadata:
+    image: postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=galaxydb
+      - POSTGRES_DB=postgres
+      - PGPORT=5432
+      - PGHOST=galaxydb-metadata
+    networks:
+      - galaxydb-network
+    volumes:
+      - ./loadbalancer/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  galaxydb-loadbalancer:
     build: "./loadbalancer"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -17,3 +28,5 @@ services:
     privileged: true
     networks:
       - galaxydb-network
+    depends_on:
+      - galaxydb-metadata

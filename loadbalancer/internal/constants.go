@@ -1,4 +1,4 @@
-package main
+package galaxydb
 
 const (
 	SERVER_DOCKER_IMAGE_NAME = "galaxydb-server"

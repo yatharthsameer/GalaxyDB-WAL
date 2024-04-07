@@ -1,4 +1,4 @@
-package main
+package galaxydb
 
 import (
 	"sync"
@@ -7,8 +7,8 @@ import (
 )
 
 type ShardTConfig struct {
-	chm   *consistenthashmap.ConsistentHashMap
-	mutex *sync.Mutex
+	CHM   *consistenthashmap.ConsistentHashMap
+	Mutex *sync.Mutex
 }
 
 type Shard struct {
@@ -154,3 +154,8 @@ type ServerCopyPayload struct {
 }
 
 type ServerCopyResponse map[string][]StudT
+
+type ReplaceServerRequest struct {
+	DownServerID int `json:"down_server_id"`
+	NewServerID  int `json:"new_server_id"`
+}

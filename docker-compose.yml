@@ -18,13 +18,30 @@ services:
       - ./loadbalancer/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   galaxydb-loadbalancer:
-    build: "./loadbalancer"
+    build:
+      context: ./loadbalancer
+      dockerfile: Dockerfile.lb
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./server:/server
     image: galaxydb-lb
     ports:
       - "5000:5000"
+    privileged: true
+    networks:
+      - galaxydb-network
+    depends_on:
+      - galaxydb-metadata
+
+  galaxydb-shard-manager:
+    build:
+      context: ./loadbalancer
+      dockerfile: Dockerfile.manager
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    image: galaxydb-shard-manager
+    ports:
+      - "8000:8000"
     privileged: true
     networks:
       - galaxydb-network

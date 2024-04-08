@@ -194,8 +194,7 @@ func GetServerIDsForShard(db *sql.DB, shardID string) []int {
 	return serverIDs
 }
 
-func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, serverIDs []int, shardTConfigs map[string]ShardTConfig) {
-	fmt.Printf("Restarting Server%d as Server%d\n", downServerID, newServerID)
+func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, serverIDs []int, shardTConfigs map[string]ShardTConfig) []int {
 	SpawnNewServerInstance(fmt.Sprintf("Server%d", newServerID), newServerID)
 
 	rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id=$1", downServerID)
@@ -298,5 +297,6 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 		}
 	}
 	newServerIDs = append(newServerIDs, newServerID)
-	serverIDs = newServerIDs
+
+	return newServerIDs
 }

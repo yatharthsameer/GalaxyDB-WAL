@@ -25,7 +25,7 @@ var (
 )
 
 func getServerIDs() []int {
-	resp, err := http.Get("http://localhost:5000/serverids")
+	resp, err := http.Get(galaxy.LOADBALANCER_URL + "/serverids")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -97,7 +97,8 @@ func monitorServers(stopSignal chan os.Signal) {
 				log.Println("Error marshaling JSON: ", err)
 			}
 
-			_, err = http.Post("http://localhost:5000", "application/json", bytes.NewBuffer(payloadData))
+			log.Printf("Restarting Server%d as Server%d\n", downServerID, newServerID)
+			_, err = http.Post(galaxy.LOADBALANCER_URL+"/replace_server", "application/json", bytes.NewBuffer(payloadData))
 			if err != nil {
 				log.Println("Error replacing server: ", err)
 				continue
@@ -146,7 +147,7 @@ func main() {
 		server.Shutdown(context.Background())
 	}()
 
-	http.HandleFunc("check_heartbeat", checkHeartbeatHandler)
+	http.HandleFunc("/check_heartbeat", checkHeartbeatHandler)
 
 	log.Println("Shard Manager running on port 8000")
 	err = server.ListenAndServe()

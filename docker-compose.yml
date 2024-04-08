@@ -16,6 +16,11 @@ services:
       - galaxydb-network
     volumes:
       - ./loadbalancer/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
 
   galaxydb-loadbalancer:
     build:
@@ -30,8 +35,14 @@ services:
     privileged: true
     networks:
       - galaxydb-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/serverids"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
     depends_on:
-      - galaxydb-metadata
+      galaxydb-metadata:
+        condition: service_healthy
 
   galaxydb-shard-manager:
     build:
@@ -46,4 +57,7 @@ services:
     networks:
       - galaxydb-network
     depends_on:
-      - galaxydb-metadata
+      galaxydb-metadata:
+        condition: service_healthy
+      galaxydb-loadbalancer:
+        condition: service_healthy

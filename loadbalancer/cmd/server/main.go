@@ -48,7 +48,7 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 		galaxy.SpawnNewServerInstance(fmt.Sprintf("Server%d", serverID), serverID)
 		galaxy.ConfigNewServerInstance(serverID, shardIDs)
 
-		_, err := http.Post("http://localhost:8000/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
+		_, err := http.Post(galaxy.SHARD_MANAGER_URL+"/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
 		if err != nil {
 			log.Println("Error checking heartbeat:", err)
 		}
@@ -174,7 +174,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 		galaxy.SpawnNewServerInstance(fmt.Sprintf("Server%d", serverID), serverID)
 		galaxy.ConfigNewServerInstance(serverID, shardIDs)
 
-		_, err := http.Post("http://localhost:8000/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
+		_, err := http.Post(galaxy.SHARD_MANAGER_URL+"/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
 		if err != nil {
 			log.Println("Error checking heartbeat:", err)
 		}
@@ -590,7 +590,7 @@ func replaceServerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	galaxy.ReplaceServerInstance(db, req.DownServerID, req.NewServerID, serverIDs, shardTConfigs)
+	serverIDs = galaxy.ReplaceServerInstance(db, req.DownServerID, req.NewServerID, serverIDs, shardTConfigs)
 
 	w.WriteHeader(http.StatusOK)
 }

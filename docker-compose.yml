@@ -20,7 +20,7 @@ services:
       test: ["CMD", "pg_isready", "-U", "postgres"]
       interval: 5s
       timeout: 3s
-      retries: 3
+      retries: 20
 
   galaxydb-loadbalancer:
     build:
@@ -39,7 +39,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:5000/serverids"]
       interval: 5s
       timeout: 3s
-      retries: 3
+      retries: 20
     depends_on:
       galaxydb-metadata:
         condition: service_healthy

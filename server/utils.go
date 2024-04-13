@@ -80,7 +80,8 @@ func writeToWAL(req WriteRequest) error {
 		return fmt.Errorf("error opening WAL file: %w", err)
 	}
 	defer walFile.Close()
-
+	newLine := []byte("\n")
+	recordData = append(recordData, newLine...)
 	_, err = walFile.Write(recordData)
 	if err != nil {
 		return fmt.Errorf("error writing to WAL file: %w", err)

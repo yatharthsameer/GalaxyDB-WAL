@@ -299,10 +299,10 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 			additionalRemovalsNeeded -= 1
 		}
 	}
-
+	primaryShardList := []string{}
 	for _, serverIDRemoved := range serverIDsRemoved {
 		shardIDsRemoved := []string{}
-		rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id = $1;", serverIDRemoved)
+		rows, err := db.Query("SELECT shard_id, is_primary FROM mapt WHERE server_id = $1;", serverIDRemoved)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -310,11 +310,15 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 
 		for rows.Next() {
 			var shardID string
-			err = rows.Scan(&shardID)
+			isPrimary := false
+			err = rows.Scan(&shardID, &isPrimary)
 			if err != nil {
 				log.Fatal(err)
 			}
 			shardIDsRemoved = append(shardIDsRemoved, shardID)
+			if isPrimary {
+				primaryShardList = append(primaryShardList, shardID)
+			}
 		}
 
 		for _, shardIDRemoved := range shardIDsRemoved {
@@ -348,6 +352,21 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 		galaxy.RemoveServerInstance(serverNameRemoved)
 
 		serverNamesRemoved = append(serverNamesRemoved, serverNameRemoved)
+	}
+
+	payload := galaxy.PrimaryElectRequest{
+		ShardIDs: primaryShardList,
+	}
+
+	payloadData, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalln("Error marshaling JSON: ", err)
+		return
+	}
+
+	_, err = http.Post(galaxy.SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
+	if err != nil {
+		log.Println("Error electing primary:", err)
 	}
 
 	response := galaxy.RemoveResponseSuccess{

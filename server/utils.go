@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,33 +32,26 @@ func fetchDataFromShard(db *sql.DB, query string) ([]ShardData, error) {
 	return data, nil
 }
 
-func writeDataToShard(db *sql.DB, request WriteRequest) (*WriteResponse, error) {
+func writeDataToShard(db *sql.DB, request WriteRequest) error {
 	tx, err := db.Begin()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer tx.Rollback()
-	log.Println("writing data to shard")
 
 	for _, entry := range request.Data {
 		_, err := tx.Exec("INSERT INTO "+request.Shard+" (Stud_id, Stud_name, Stud_marks) VALUES (?, ?, ?)",
 			entry.StudentID, entry.StudentName, entry.StudentMarks)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	updatedIndex := request.CurrIndex + len(request.Data)
-
-	return &WriteResponse{
-		Message:    "Data entries added",
-		CurrentIdx: updatedIndex,
-		Status:     "success",
-	}, nil
+	return nil
 }
 
 func writeToWAL(req WriteRequest) error {
@@ -102,102 +93,45 @@ func writeToWAL(req WriteRequest) error {
 	return nil
 }
 
-func replicateWritesToSecondaries(req WriteRequest) ([]bool, error) {
+func replicateWritesToSecondaries(payload WriteRequest, secondaryServers []int) ([]bool, error) {
 
-	return nil, nil
+	acks := make([]bool, len(secondaryServers))
+	var err error
+
+	for i, serverID := range secondaryServers {
+		payloadData, err := json.Marshal(payload)
+		if err != nil {
+			acks[i] = false
+			continue
+		}
+
+		_, err = http.Post(fmt.Sprintf("http://Server%d:5000/write", serverID), "application/json", bytes.NewBuffer(payloadData))
+		if err != nil {
+			acks[i] = false
+		}
+	}
+	return acks, err
 }
 
 func receivedMajorityAck(acks []bool) bool {
 
-	return true
+	finalAck := true
+	for _, ack := range acks {
+		if !ack {
+			finalAck = false
+			break
+		}
+	}
+	return finalAck
 }
 
-func commitToDatabase(req WriteRequest) error {
+func isPrimary(primary int) bool {
 
-	return nil
-}
-
-func isPrimary(serverID int, shardID string) bool {
-	// check from MapT
-	payload := IsPRimaryRequest{
-		ServerID: serverID,
-		ShardID:  shardID,
-	}
-	payloadData, err := json.Marshal(payload)
-	if err != nil {
-		log.Fatalln("Error marshaling JSON: ", err)
-	}
-	req, err := http.NewRequest("GET", LOADBALANCER_URL+"/isPrimary", bytes.NewBuffer(payloadData))
-	if err != nil {
-		log.Fatal(err)
-	}
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("Error reading response body:", err)
-	}
-
-	var isPrimary bool
-	err = json.Unmarshal(body, &isPrimary)
-	if err != nil {
-		log.Println("Error unmarshaling JSON: ", err)
-	}
-	return isPrimary
-}
-
-func writeHandlerNew(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not supported", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var reqBody WriteRequest
-	err := json.NewDecoder(r.Body).Decode(&reqBody)
-	if err != nil {
-		http.Error(w, "Error decoding JSON", http.StatusBadRequest)
-		return
-	}
-
-	if err := writeToWAL(reqBody); err != nil {
-		http.Error(w, "Error writing to WAL", http.StatusInternalServerError)
-		return
-	}
-	serverID := os.Getenv("SERVER_ID")
+	serverID := os.Getenv("id")
 	serverIDInt, err := strconv.Atoi(serverID)
 	if err != nil {
-		http.Error(w, "Error converting serverID to int", http.StatusInternalServerError)
-		return
+		return false
 	}
 
-	if isPrimary(serverIDInt, reqBody.Shard) {
-		acks, err := replicateWritesToSecondaries(reqBody)
-		if err != nil {
-			http.Error(w, "Error replicating to secondaries", http.StatusInternalServerError)
-			return
-		}
-
-		if !receivedMajorityAck(acks) {
-			http.Error(w, "Did not receive majority acknowledgments", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if err := commitToDatabase(reqBody); err != nil {
-		http.Error(w, "Error committing to database", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(WriteResponse{
-		Message:    "Data entries added",
-		CurrentIdx: reqBody.CurrIndex + len(reqBody.Data),
-		Status:     "success",
-	})
+	return serverIDInt == primary
 }

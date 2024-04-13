@@ -160,7 +160,11 @@ type ReplaceServerRequest struct {
 	NewServerID  int `json:"new_server_id"`
 }
 
-type IsPrimaryRequest struct {
-	ServerID int    `json:"server_id"`
-	ShardID  string `json:"shard_id"`
+type ShardServersRequest struct {
+	ShardID string `json:"shard_id"`
+}
+
+type ShardServersResponse struct {
+	ServerIDs []int `json:"servers"`
+	Primary   int   `json:"primary"`
 }

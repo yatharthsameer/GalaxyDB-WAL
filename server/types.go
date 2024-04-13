@@ -23,15 +23,13 @@ type ShardData struct {
 }
 
 type WriteRequest struct {
-	Shard     string      `json:"shard"`
-	CurrIndex int         `json:"curr_idx"`
-	Data      []ShardData `json:"data"`
+	Shard string      `json:"shard"`
+	Data  []ShardData `json:"data"`
 }
 
 type WriteResponse struct {
-	Message    string `json:"message"`
-	CurrentIdx int    `json:"current_idx"`
-	Status     string `json:"status"`
+	Message string `json:"message"`
+	Status  string `json:"status"`
 }
 
 type ReadRequest struct {
@@ -64,7 +62,11 @@ type WALRecord struct {
 	Data      []ShardData `json:"data"`
 }
 
-type IsPRimaryRequest struct {
-	ShardID  string `json:"shard_id"`
-	ServerID int    `json:"server_id"`
+type ShardServersRequest struct {
+	ShardID string `json:"shard_id"`
+}
+
+type ShardServersResponse struct {
+	ServerIDs []int `json:"server_ids"`
+	Primary   int   `json:"primary"`
 }

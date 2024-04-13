@@ -6,4 +6,9 @@ CREATE TABLE IF NOT EXISTS shardt (
 );
 
 
-CREATE TABLE IF NOT EXISTS mapt (shard_id TEXT, server_id INT);
+CREATE TABLE IF NOT EXISTS mapt (
+    shard_id TEXT,
+    server_id INT,
+    is_primary BOOLEAN,
+    PRIMARY KEY (shard_id, server_id)
+);

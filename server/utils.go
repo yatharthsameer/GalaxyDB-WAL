@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -72,10 +73,9 @@ func writeToWAL(req WriteRequest) error {
 		return fmt.Errorf("error creating WAL directory: %w", err)
 	}
 
-	walFileName := fmt.Sprintf("%s_%d.wal", req.Shard, time.Now().UnixNano())
-	walFilePath := filepath.Join(WAL_DIRECTORY_PATH, walFileName)
+	walFilePath := filepath.Join(WAL_DIRECTORY_PATH, "wal.txt")
 
-	walFile, err := os.OpenFile(walFilePath, os.O_CREATE|os.O_WRONLY, 0644)
+	walFile, err := os.OpenFile(walFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("error opening WAL file: %w", err)
 	}
@@ -137,17 +137,36 @@ func isPrimary(primary int) bool {
 	return serverIDInt == primary
 }
 
+func lineCounter(r io.Reader) (int, error) {
+	buf := make([]byte, 32*1024)
+	count := 0
+	lineSep := []byte{'\n'}
+
+	for {
+		c, err := r.Read(buf)
+		count += bytes.Count(buf[:c], lineSep)
+
+		switch {
+		case err == io.EOF:
+			return count, nil
+
+		case err != nil:
+			return count, err
+		}
+	}
+}
+
 func getWalLength() int {
 
-	_, err := os.Stat(WAL_DIRECTORY_PATH)
+	walFilePath := filepath.Join(WAL_DIRECTORY_PATH, "wal.txt")
+	file, err := os.Open(walFilePath)
 	if os.IsNotExist(err) {
 		return 0
 	}
-
-	files, err := os.ReadDir(WAL_DIRECTORY_PATH)
+	defer file.Close()
+	lines, err := lineCounter(file)
 	if err != nil {
-		log.Println("Error while fetching wal length: " + err.Error())
+		log.Println("Error while fetching wal file length: " + err.Error())
 	}
-
-	return len(files)
+	return lines
 }

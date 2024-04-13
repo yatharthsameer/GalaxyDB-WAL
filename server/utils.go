@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -114,9 +117,38 @@ func commitToDatabase(req WriteRequest) error {
 	return nil
 }
 
-func isPrimary(shardID string) bool {
+func isPrimary(serverID int, shardID string) bool {
+	// check from MapT
+	payload := IsPRimaryRequest{
+		ServerID: serverID,
+		ShardID:  shardID,
+	}
+	payloadData, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalln("Error marshaling JSON: ", err)
+	}
+	req, err := http.NewRequest("GET", LOADBALANCER_URL+"/isPrimary", bytes.NewBuffer(payloadData))
+	if err != nil {
+		log.Fatal(err)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
 
-	return true
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Error reading response body:", err)
+	}
+
+	var isPrimary bool
+	err = json.Unmarshal(body, &isPrimary)
+	if err != nil {
+		log.Println("Error unmarshaling JSON: ", err)
+	}
+	return isPrimary
 }
 
 func writeHandlerNew(w http.ResponseWriter, r *http.Request) {
@@ -136,8 +168,14 @@ func writeHandlerNew(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error writing to WAL", http.StatusInternalServerError)
 		return
 	}
+	serverID := os.Getenv("SERVER_ID")
+	serverIDInt, err := strconv.Atoi(serverID)
+	if err != nil {
+		http.Error(w, "Error converting serverID to int", http.StatusInternalServerError)
+		return
+	}
 
-	if isPrimary(reqBody.Shard) {
+	if isPrimary(serverIDInt, reqBody.Shard) {
 		acks, err := replicateWritesToSecondaries(reqBody)
 		if err != nil {
 			http.Error(w, "Error replicating to secondaries", http.StatusInternalServerError)

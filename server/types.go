@@ -63,3 +63,8 @@ type WALRecord struct {
 	Shard     string      `json:"shard"`
 	Data      []ShardData `json:"data"`
 }
+
+type IsPRimaryRequest struct {
+	ShardID  string `json:"shard_id"`
+	ServerID int    `json:"server_id"`
+}

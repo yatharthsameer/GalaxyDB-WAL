@@ -595,6 +595,29 @@ func replaceServerHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func isPrimaryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not supported", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req galaxy.IsPrimaryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Error decoding request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	isPrimary := false
+	err := db.QueryRow("SELECT Primary FROM MapT WHERE server_id = $1 and shard_id = $2;", req.ServerID, req.ShardID).Scan(&isPrimary)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(isPrimary)
+}
+
 func main() {
 	galaxy.BuildServerInstance()
 
@@ -622,6 +645,7 @@ func main() {
 	http.HandleFunc("/del", deleteHandler)
 	http.HandleFunc("/serverids", serverIDsHandler)
 	http.HandleFunc("/replace_server", replaceServerHandler)
+	http.HandleFunc("/is_primary", isPrimaryHandler)
 
 	server := &http.Server{Addr: ":5000", Handler: nil}
 

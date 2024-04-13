@@ -108,15 +108,13 @@ type WriteResponse struct {
 }
 
 type ServerWritePayload struct {
-	Shard        string  `json:"shard"`
-	CurrentIndex int     `json:"curr_idx"`
-	Data         []StudT `json:"data"`
+	Shard string  `json:"shard"`
+	Data  []StudT `json:"data"`
 }
 
 type ServerWriteResponse struct {
-	Status       string `json:"status"`
-	Message      string `json:"message"`
-	CurrentIndex int    `json:"current_idx"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
 type UpdateRequest struct {

@@ -250,13 +250,9 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 
 		shardData := respData[shardID]
 
-		valid_idx := GetValidIDx(db, shardID)
-		curr_idx := valid_idx - len(shardData)
-
 		payloadWrite := ServerWritePayload{
-			Shard:        shardID,
-			CurrentIndex: curr_idx,
-			Data:         shardData,
+			Shard: shardID,
+			Data:  shardData,
 		}
 		payloadData, err = json.Marshal(payloadWrite)
 		if err != nil {
@@ -276,10 +272,6 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 		var respDataWrite ServerWriteResponse
 		json.Unmarshal(body, &respDataWrite)
 		resp.Body.Close()
-
-		if respDataWrite.CurrentIndex != valid_idx {
-			log.Println("Error writing to Server: Invalid Index")
-		}
 
 		shardTConfigs[shardID].CHM.AddServer(newServerID)
 		shardTConfigs[shardID].Mutex.Unlock()

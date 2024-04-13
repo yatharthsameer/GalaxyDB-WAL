@@ -474,12 +474,9 @@ func WriteHandler(w http.ResponseWriter, r *http.Request) {
 	for shardID, studData := range studDataToWrite {
 		shardTConfigs[shardID].Mutex.Lock()
 
-		currentIndex := galaxy.GetValidIDx(db, shardID)
-
 		payload := galaxy.ServerWritePayload{
-			Shard:        shardID,
-			Data:         studData,
-			CurrentIndex: currentIndex,
+			Shard: shardID,
+			Data:  studData,
 		}
 		payloadData, err := json.Marshal(payload)
 		if err != nil {
@@ -503,16 +500,6 @@ func WriteHandler(w http.ResponseWriter, r *http.Request) {
 			var respData galaxy.ServerWriteResponse
 			json.Unmarshal(body, &respData)
 			resp.Body.Close()
-
-			if respData.CurrentIndex != currentIndex+len(studData) {
-				log.Println("Error writing to Server: Invalid Index")
-				return
-			}
-		}
-
-		_, err = db.Exec("UPDATE shardt SET valid_idx = $1 WHERE shard_id = $2;", currentIndex+len(studData), shardID)
-		if err != nil {
-			log.Fatal(err)
 		}
 
 		shardTConfigs[shardID].Mutex.Unlock()

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -134,4 +135,19 @@ func isPrimary(primary int) bool {
 	}
 
 	return serverIDInt == primary
+}
+
+func getWalLength() int {
+
+	_, err := os.Stat(WAL_DIRECTORY_PATH)
+	if os.IsNotExist(err) {
+		return 0
+	}
+
+	files, err := os.ReadDir(WAL_DIRECTORY_PATH)
+	if err != nil {
+		log.Println("Error while fetching wal length: " + err.Error())
+	}
+
+	return len(files)
 }

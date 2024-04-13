@@ -300,3 +300,23 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 
 	return newServerIDs
 }
+
+func GetServerWalLength(serverID int) int {
+	resp, err := http.Get("http://" + GetServerIP(fmt.Sprintf("Server%d", serverID)) + ":" + fmt.Sprint(SERVER_PORT) + "/wal_length")
+	if err != nil {
+		log.Println("Error getting WAL length from Server:", err)
+		return -1
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Error reading response body:", err)
+		return -1
+	}
+
+	var walLength int
+	json.Unmarshal(body, &walLength)
+	resp.Body.Close()
+
+	return walLength
+}

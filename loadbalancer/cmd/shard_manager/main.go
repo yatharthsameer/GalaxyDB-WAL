@@ -165,6 +165,51 @@ func shardServersHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func primaryElectHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not supported", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req galaxy.PrimaryElectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Error decoding request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, shard := range req.ShardIDs {
+		rows, err := db.Query("SELECT server_id FROM MapT WHERE shard_id = $1;", shard)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer rows.Close()
+
+		var primaryServer int
+		maxWalLength := 0
+
+		for rows.Next() {
+			var server int
+			err := rows.Scan(&server)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			walLength := galaxy.GetServerWalLength(server)
+			if walLength > maxWalLength {
+				maxWalLength = walLength
+				primaryServer = server
+			}
+		}
+
+		_, err = db.Exec("UPDATE MapT SET is_primary = TRUE WHERE shard_id = $1 AND server_id = $2;", shard, primaryServer)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func main() {
 	var err error
 	db, err = sql.Open("postgres", galaxy.DB_CONNECTION_STRING)
@@ -193,6 +238,7 @@ func main() {
 
 	http.HandleFunc("/check_heartbeat", checkHeartbeatHandler)
 	http.HandleFunc("/shard_servers", shardServersHandler)
+	http.HandleFunc("/primary_elect", primaryElectHandler)
 
 	log.Println("Shard Manager running on port 8000")
 	err = server.ListenAndServe()

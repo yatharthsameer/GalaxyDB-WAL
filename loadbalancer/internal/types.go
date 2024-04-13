@@ -168,3 +168,7 @@ type ShardServersResponse struct {
 	ServerIDs []int `json:"servers"`
 	Primary   int   `json:"primary"`
 }
+
+type PrimaryElectRequest struct {
+	ShardIDs []string `json:"shard_ids"`
+}

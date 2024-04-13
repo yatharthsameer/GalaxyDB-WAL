@@ -320,6 +320,18 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func walLengthHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not supported", http.StatusMethodNotAllowed)
+		return
+	}
+
+	walLength := getWalLength()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(walLength)
+}
+
 func main() {
 	var err error
 	db, err = sql.Open("sqlite3", "galaxy.db")
@@ -340,6 +352,7 @@ func main() {
 	http.HandleFunc("/write", writeHandler)
 	http.HandleFunc("/update", updateHandler)
 	http.HandleFunc("/delete", deleteHandler)
+	http.HandleFunc("/wal_length", walLengthHandler)
 
 	fmt.Println("Starting server on port 5000")
 	err = http.ListenAndServe(":5000", nil)

@@ -54,6 +54,8 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var shardIDs []string
+
 	for _, shard := range req.Shards {
 		_, err := db.Exec("INSERT INTO shardt (stud_id_low, shard_id, shard_size, valid_idx) VALUES ($1, $2, $3, $4);", shard.StudIDLow, shard.ShardID, shard.ShardSize, 0)
 		if err != nil {
@@ -80,6 +82,23 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			shardTConfigs[shard.ShardID].CHM.AddServer(serverID)
 		}
+
+		shardIDs = append(shardIDs, shard.ShardID)
+	}
+
+	payload := galaxy.PrimaryElectRequest{
+		ShardIDs: shardIDs,
+	}
+
+	payloadData, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalln("Error marshaling JSON: ", err)
+		return
+	}
+
+	_, err = http.Post(galaxy.SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
+	if err != nil {
+		log.Println("Error electing primary:", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -180,6 +199,8 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var shardIDs []string
+
 	for _, shard := range req.NewShards {
 		_, err := db.Exec("INSERT INTO shardt (stud_id_low, shard_id, shard_size, valid_idx) VALUES ($1, $2, $3, $4);", shard.StudIDLow, shard.ShardID, shard.ShardSize, 0)
 		if err != nil {
@@ -206,6 +227,23 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			shardTConfigs[shard.ShardID].CHM.AddServer(serverID)
 		}
+
+		shardIDs = append(shardIDs, shard.ShardID)
+	}
+
+	payload := galaxy.PrimaryElectRequest{
+		ShardIDs: shardIDs,
+	}
+
+	payloadData, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalln("Error marshaling JSON: ", err)
+		return
+	}
+
+	_, err = http.Post(galaxy.SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
+	if err != nil {
+		log.Println("Error electing primary:", err)
 	}
 
 	addServerMessage := "Add "

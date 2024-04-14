@@ -261,28 +261,19 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 			log.Println("Error marshaling JSON: ", err)
 		}
 
-		resp, err = http.Post("http://"+GetServerIP(fmt.Sprintf("Server%d", newServerID))+":"+fmt.Sprint(SERVER_PORT)+"/write", "application/json", bytes.NewBuffer(payloadData))
+		_, err = http.Post("http://"+GetServerIP(fmt.Sprintf("Server%d", newServerID))+":"+fmt.Sprint(SERVER_PORT)+"/write", "application/json", bytes.NewBuffer(payloadData))
 		if err != nil {
 			log.Println("Error writing to Server:", err)
 		}
-
-		body, err = io.ReadAll(resp.Body)
-		if err != nil {
-			log.Println("Error reading response body:", err)
-		}
-
-		var respDataWrite ServerWriteResponse
-		json.Unmarshal(body, &respDataWrite)
-		resp.Body.Close()
 
 		shardTConfigs[shardID].CHM.AddServer(newServerID)
 		shardTConfigs[shardID].Mutex.Unlock()
 
 		row := db.QueryRow("SELECT is_primary FROM mapt WHERE shard_id=$1 AND server_id=$2", shardID, downServerID)
-		var isPrimary bool
+		isPrimary := false
 		err = row.Scan(&isPrimary)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
 		}
 		if isPrimary {
 			primaryShardList = append(primaryShardList, shardID)
@@ -294,18 +285,20 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 		log.Println("Error updating mapt: ", err)
 	}
 
-	payload := PrimaryElectRequest{
-		ShardIDs: primaryShardList,
-	}
+	if len(primaryShardList) != 0 {
+		payload := PrimaryElectRequest{
+			ShardIDs: primaryShardList,
+		}
 
-	payloadData, err := json.Marshal(payload)
-	if err != nil {
-		log.Fatalln("Error marshaling JSON: ", err)
-	}
+		payloadData, err := json.Marshal(payload)
+		if err != nil {
+			log.Fatalln("Error marshaling JSON: ", err)
+		}
 
-	_, err = http.Post(SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
-	if err != nil {
-		log.Println("Error electing primary:", err)
+		_, err = http.Post(SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
+		if err != nil {
+			log.Println("Error electing primary:", err)
+		}
 	}
 
 	newServerIDs := []int{}

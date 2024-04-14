@@ -107,37 +107,6 @@ func copyHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// func writeHandler(w http.ResponseWriter, r *http.Request) {
-// 	if r.Method != http.MethodPost {
-// 		http.Error(w, "Method not supported", http.StatusMethodNotAllowed)
-// 		return
-// 	}
-
-// 	var reqBody WriteRequest
-// 	err := json.NewDecoder(r.Body).Decode(&reqBody)
-// 	if err != nil {
-// 		w.WriteHeader(http.StatusBadRequest)
-// 		fmt.Fprintf(w, "Error decoding JSON: %v", err)
-// 		return
-// 	}
-
-// 	if err := writeToWAL(reqBody); err != nil {
-// 		http.Error(w, "Error writing to WAL", http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	resp, err := writeDataToShard(db, reqBody)
-// 	if err != nil {
-// 		w.WriteHeader(http.StatusInternalServerError)
-// 		fmt.Fprintf(w, "Error writing data to shard: %v", err)
-// 		return
-// 	}
-
-// 	w.Header().Set("Content-Type", "application/json")
-// 	w.WriteHeader(http.StatusOK)
-// 	json.NewEncoder(w).Encode(resp)
-// }
-
 func writeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not supported", http.StatusMethodNotAllowed)
@@ -150,64 +119,66 @@ func writeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error decoding JSON", http.StatusBadRequest)
 		return
 	}
+	shard := reqBody.Shard
+	synReplication(shard, reqBody, "POST", "/write", w)
 
-	payload := ShardServersRequest{
-		ShardID: reqBody.Shard,
-	}
+	// payload := ShardServersRequest{
+	// 	ShardID: reqBody.Shard,
+	// }
 
-	payloadData, err := json.Marshal(payload)
-	if err != nil {
-		log.Fatalln("Error marshaling JSON: ", err)
-	}
+	// payloadData, err := json.Marshal(payload)
+	// if err != nil {
+	// 	log.Fatalln("Error marshaling JSON: ", err)
+	// }
 
-	req, err := http.NewRequest("GET", SHARD_MANAGER_URL+"/shard_servers", bytes.NewBuffer(payloadData))
-	if err != nil {
-		log.Fatal(err)
-	}
+	// req, err := http.NewRequest("GET", SHARD_MANAGER_URL+"/shard_servers", bytes.NewBuffer(payloadData))
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
+	// client := &http.Client{}
+	// resp, err := client.Do(req)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("Error reading response body:", err)
-	}
+	// body, err := io.ReadAll(resp.Body)
+	// if err != nil {
+	// 	log.Println("Error reading response body:", err)
+	// }
 
-	var shardServers ShardServersResponse
-	err = json.Unmarshal(body, &shardServers)
-	if err != nil {
-		log.Println("Error unmarshaling JSON: ", err)
-	}
+	// var shardServers ShardServersResponse
+	// err = json.Unmarshal(body, &shardServers)
+	// if err != nil {
+	// 	log.Println("Error unmarshaling JSON: ", err)
+	// }
 
-	if err := writeToWAL(reqBody); err != nil {
-		http.Error(w, "Error writing to WAL", http.StatusInternalServerError)
-		return
-	}
+	// if err := writeToWAL(reqBody); err != nil {
+	// 	http.Error(w, "Error writing to WAL", http.StatusInternalServerError)
+	// 	return
+	// }
 
-	if isPrimary(shardServers.Primary) {
+	// if isPrimary(shardServers.Primary) {
 
-		var secondaries []int
-		for _, server := range shardServers.ServerIDs {
-			if server != shardServers.Primary {
-				secondaries = append(secondaries, server)
-			}
-		}
+	// 	var secondaries []int
+	// 	for _, server := range shardServers.ServerIDs {
+	// 		if server != shardServers.Primary {
+	// 			secondaries = append(secondaries, server)
+	// 		}
+	// 	}
 
-		acks, err := replicateWritesToSecondaries(reqBody, secondaries)
-		if err != nil {
-			http.Error(w, "Error replicating to secondaries", http.StatusInternalServerError)
-			return
-		}
+	// 	acks, err := replicateToSecondaries(reqBody, secondaries)
+	// 	if err != nil {
+	// 		http.Error(w, "Error replicating to secondaries", http.StatusInternalServerError)
+	// 		return
+	// 	}
 
-		if !receivedMajorityAck(acks) {
-			http.Error(w, "Did not receive majority acknowledgments", http.StatusInternalServerError)
-			return
-		}
-	}
+	// 	if !receivedMajorityAck(acks) {
+	// 		http.Error(w, "Did not receive majority acknowledgments", http.StatusInternalServerError)
+	// 		return
+	// 	}
+	// }
 
 	if err := writeDataToShard(db, reqBody); err != nil {
 		http.Error(w, "Error committing to database", http.StatusInternalServerError)
@@ -256,6 +227,66 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func synReplication(shard string, reqBody Requester, reqMethod string, route string, w http.ResponseWriter) {
+	payload := ShardServersRequest{
+		ShardID: shard,
+	}
+
+	payloadData, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalln("Error marshaling JSON: ", err)
+	}
+
+	req, err := http.NewRequest("GET", SHARD_MANAGER_URL+"/shard_servers", bytes.NewBuffer(payloadData))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Error reading response body:", err)
+	}
+
+	var shardServers ShardServersResponse
+	err = json.Unmarshal(body, &shardServers)
+	if err != nil {
+		log.Println("Error unmarshaling JSON: ", err)
+	}
+
+	if err := writeToWAL(reqBody); err != nil {
+		http.Error(w, "Error writing to WAL", http.StatusInternalServerError)
+		return
+	}
+
+	if isPrimary(shardServers.Primary) {
+
+		var secondaries []int
+		for _, server := range shardServers.ServerIDs {
+			if server != shardServers.Primary {
+				secondaries = append(secondaries, server)
+			}
+		}
+
+		acks, err := replicateToSecondaries(reqBody, reqMethod, route, secondaries)
+		if err != nil {
+			http.Error(w, "Error replicating to secondaries", http.StatusInternalServerError)
+			return
+		}
+
+		if !receivedMajorityAck(acks) {
+			http.Error(w, "Did not receive majority acknowledgments", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
 func updateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		http.Error(w, "Method not supported", http.StatusMethodNotAllowed)
@@ -271,6 +302,7 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shard := reqBody.Shard
+	synReplication(shard, reqBody, "PUT", "/update", w)
 	query := fmt.Sprintf("UPDATE %s SET Stud_marks = ? WHERE Stud_id = ?", shard)
 
 	_, err = db.Exec(query, reqBody.Data.StudentMarks, reqBody.StudID)
@@ -303,6 +335,7 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shard := reqBody.Shard
+	synReplication(shard, reqBody, "DELETE", "/delete", w)
 	query := fmt.Sprintf("DELETE FROM %s WHERE Stud_id = ?", shard)
 
 	_, err = db.Exec(query, reqBody.StudID)

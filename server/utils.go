@@ -34,15 +34,16 @@ func fetchDataFromShard(db *sql.DB, query string) ([]ShardData, error) {
 	return data, nil
 }
 
-func writeDataToShard(db *sql.DB, request WriteRequest) error {
+func writeDataToShard(db *sql.DB, request Requester) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-
-	for _, entry := range request.Data {
-		_, err := tx.Exec("INSERT INTO "+request.Shard+" (Stud_id, Stud_name, Stud_marks) VALUES (?, ?, ?)",
+	reqData := request.GetShardData()
+	reqShard := request.GetShard()
+	for _, entry := range reqData {
+		_, err := tx.Exec("INSERT INTO "+reqShard+" (Stud_id, Stud_name, Stud_marks) VALUES (?, ?, ?)",
 			entry.StudentID, entry.StudentName, entry.StudentMarks)
 		if err != nil {
 			return err
@@ -56,11 +57,12 @@ func writeDataToShard(db *sql.DB, request WriteRequest) error {
 	return nil
 }
 
-func writeToWAL(req WriteRequest) error {
+func writeToWAL(req Requester) error {
 	record := WALRecord{
 		Timestamp: time.Now(),
-		Shard:     req.Shard,
-		Data:      req.Data,
+		Shard:     req.GetShard(),
+		Data:      req.GetShardData(),
+		StudID:    req.GetStudID(),
 	}
 
 	recordData, err := json.Marshal(record)
@@ -95,7 +97,43 @@ func writeToWAL(req WriteRequest) error {
 	return nil
 }
 
-func replicateWritesToSecondaries(payload WriteRequest, secondaryServers []int) ([]bool, error) {
+func (u UpdateRequest) GetShard() string {
+	return u.Shard
+}
+
+func (u UpdateRequest) GetStudID() int {
+	return u.StudID
+}
+
+func (u UpdateRequest) GetShardData() []ShardData {
+	return []ShardData{u.Data}
+}
+
+func (d DeleteRequest) GetShard() string {
+	return d.Shard
+}
+
+func (d DeleteRequest) GetStudID() int {
+	return d.StudID
+}
+
+func (d DeleteRequest) GetShardData() []ShardData {
+	// No data for DeleteRequest
+	return nil
+}
+func (w WriteRequest) GetShard() string {
+	return w.Shard
+}
+
+func (w WriteRequest) GetStudID() int {
+	// No student ID for WriteRequest
+	return 0
+}
+
+func (w WriteRequest) GetShardData() []ShardData {
+	return w.Data
+}
+func replicateToSecondaries(payload Requester, reqMethod string, route string, secondaryServers []int) ([]bool, error) {
 
 	acks := make([]bool, len(secondaryServers))
 	var err error
@@ -107,10 +145,17 @@ func replicateWritesToSecondaries(payload WriteRequest, secondaryServers []int) 
 			continue
 		}
 
-		_, err = http.Post(fmt.Sprintf("http://Server%d:5000/write", serverID), "application/json", bytes.NewBuffer(payloadData))
+		req, err := http.NewRequest(reqMethod, fmt.Sprintf("http://Server%d:5000%s", serverID, route), bytes.NewBuffer(payloadData))
+		if err != nil {
+			log.Println("Error sending request to Server:", err)
+			acks[i] = false
+		}
+		client := &http.Client{}
+		resp, err := client.Do(req)
 		if err != nil {
 			acks[i] = false
 		}
+		resp.Body.Close()
 	}
 	return acks, err
 }

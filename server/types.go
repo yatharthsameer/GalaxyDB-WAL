@@ -22,6 +22,12 @@ type ShardData struct {
 	StudentMarks int    `json:"Stud_marks"`
 }
 
+type Requester interface {
+	GetShard() string
+	GetShardData() []ShardData
+	GetStudID() int
+}
+
 type WriteRequest struct {
 	Shard string      `json:"shard"`
 	Data  []ShardData `json:"data"`
@@ -60,6 +66,7 @@ type WALRecord struct {
 	Timestamp time.Time   `json:"timestamp"`
 	Shard     string      `json:"shard"`
 	Data      []ShardData `json:"data"`
+	StudID    int         `json:"Stud_id"`
 }
 
 type ShardServersRequest struct {

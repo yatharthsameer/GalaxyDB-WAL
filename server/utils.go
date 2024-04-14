@@ -145,7 +145,7 @@ func replicateToSecondaries(payload Requester, reqMethod string, route string, s
 			continue
 		}
 
-		req, err := http.NewRequest(reqMethod, fmt.Sprintf("http://Server%d:5000%s", serverID, route), bytes.NewBuffer(payloadData))
+		req, err := http.NewRequest(reqMethod, fmt.Sprintf("http://Server%d:3000%s", serverID, route), bytes.NewBuffer(payloadData))
 		if err != nil {
 			log.Println("Error sending request to Server:", err)
 			acks[i] = false

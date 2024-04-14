@@ -10,7 +10,7 @@ FROM busybox:1.36-musl
 # Copy the binary from the builder
 COPY --from=builder /app /app
 
-EXPOSE 5000
+EXPOSE 3000
 
 # Run postinstall script and the binary
 CMD ["/app"]

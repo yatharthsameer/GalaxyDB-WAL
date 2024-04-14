@@ -153,7 +153,7 @@ def appendPerformanceToFile():
 performance = {"Write": {}, "Read": {}}
 
 # performRW(4, 6, 3)
-performRW(4, 6, 6)
+# performRW(4, 6, 6)         
 # performRW(6, 10, 8)
 
 import matplotlib.pyplot as plt
@@ -198,4 +198,4 @@ def printGraph():
     plt.show()
 
 
-# printGraph()
+printGraph()

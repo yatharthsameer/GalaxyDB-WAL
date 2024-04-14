@@ -667,9 +667,9 @@ func main() {
 	http.HandleFunc("/serverids", serverIDsHandler)
 	http.HandleFunc("/replace_server", replaceServerHandler)
 
-	server := &http.Server{Addr: ":5000", Handler: nil}
+	server := &http.Server{Addr: ":3000", Handler: nil}
 
-	log.Println("Load Balancer running on port 5000")
+	log.Println("Load Balancer running on port 3000")
 	err = server.ListenAndServe()
 	if err != http.ErrServerClosed {
 		log.Fatalln(err)

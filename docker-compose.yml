@@ -31,12 +31,12 @@ services:
       - ./server:/server
     image: galaxydb-lb
     ports:
-      - "5000:5000"
+      - "3000:3000"
     privileged: true
     networks:
       - galaxydb-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/serverids"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/serverids"]
       interval: 5s
       timeout: 3s
       retries: 20

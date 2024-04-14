@@ -215,6 +215,8 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 
 	ConfigNewServerInstance(newServerID, shardIDs)
 
+	primaryShardList := []string{}
+
 	for _, shardID := range shardIDs {
 		shardTConfigs[shardID].Mutex.Lock()
 		shardTConfigs[shardID].CHM.RemoveServer(downServerID)
@@ -275,11 +277,35 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 
 		shardTConfigs[shardID].CHM.AddServer(newServerID)
 		shardTConfigs[shardID].Mutex.Unlock()
+
+		row := db.QueryRow("SELECT is_primary FROM mapt WHERE shard_id=$1 AND server_id=$2", shardID, downServerID)
+		var isPrimary bool
+		err = row.Scan(&isPrimary)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if isPrimary {
+			primaryShardList = append(primaryShardList, shardID)
+		}
 	}
 
-	_, err = db.Exec("UPDATE mapt SET server_id=$1 WHERE server_id=$2", newServerID, downServerID)
+	_, err = db.Exec("UPDATE mapt SET server_id=$1, is_primary=FALSE WHERE server_id=$2", newServerID, downServerID)
 	if err != nil {
 		log.Println("Error updating mapt: ", err)
+	}
+
+	payload := PrimaryElectRequest{
+		ShardIDs: primaryShardList,
+	}
+
+	payloadData, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalln("Error marshaling JSON: ", err)
+	}
+
+	_, err = http.Post(SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
+	if err != nil {
+		log.Println("Error electing primary:", err)
 	}
 
 	newServerIDs := []int{}

@@ -9,7 +9,7 @@ numOfRW = 10000
 
 def perform_read_request(session, payload):
     try:
-        response = session.post("http://localhost:3000/read", json=payload)
+        response = session.post("http://localhost:5000/read", json=payload)
         if response.status_code == 200:
             return response.elapsed.microseconds
         else:
@@ -67,7 +67,7 @@ def performRW(numOfShards, numOfServers, numOfReplicas):
     }
 
     print("Sending init request...")
-    response = requests.post("http://localhost:3000/init", json=payload)
+    response = requests.post("http://localhost:5000/init", json=payload)
     if response.status_code != 200:
         print("Error in init")
         print(response.text)
@@ -80,7 +80,7 @@ def performRW(numOfShards, numOfServers, numOfReplicas):
     for i in range(numOfRW):
         payload = {"Stud_id": i, "Stud_name": f"Student{i}", "Stud_marks": str(i % 100)}
         start_time = time.time()
-        response = requests.post("http://localhost:3000/write", json=payload)
+        response = requests.post("http://localhost:5000/write", json=payload)
         writeTime += time.time() - start_time
         if response.status_code != 200:
             print(f"Error in writing for Stud_id {i}: {response.text}")
@@ -91,13 +91,13 @@ def performRW(numOfShards, numOfServers, numOfReplicas):
     # for i in range(numOfRW):
     #     payload = {"Stud_id": {"low": i, "high": i + 1}}
     #     start_time = time.time()
-    #     response = requests.post("http://localhost:3000/read", json=payload)
+    #     response = requests.post("http://localhost:5000/read", json=payload)
     #     readTime += time.time() - start_time
     #     if response.status_code != 200:
     #         print(f"Error in reading for range {i}-{i+1}: {response.text}")
     print("parallel time reading")
     # payload = {"n": numOfServers, "servers": []}
-    # response = requests.delete("http://localhost:3000/rm", json=payload)
+    # response = requests.delete("http://localhost:5000/rm", json=payload)
     readTime = 0
     with requests.Session() as session:
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:

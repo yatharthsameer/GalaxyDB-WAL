@@ -387,8 +387,8 @@ func main() {
 	http.HandleFunc("/delete", deleteHandler)
 	http.HandleFunc("/wal_length", walLengthHandler)
 
-	fmt.Println("Starting server on port 3000")
-	err = http.ListenAndServe(":3000", nil)
+	fmt.Println("Starting server on port 5000")
+	err = http.ListenAndServe(":5000", nil)
 
 	if errors.Is(err, http.ErrServerClosed) {
 		fmt.Printf("server closed\n")

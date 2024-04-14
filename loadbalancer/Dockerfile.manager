@@ -33,7 +33,7 @@ ENV GO_ENV=production
 RUN go mod download
 RUN CGO_ENABLED=1 GOOS=linux go build -o /lb/galaxydb-lb -a -ldflags '-linkmode external -extldflags "-static"' ./cmd/shard_manager/
 
-# the application is going to listen in the port 3000
+# the application is going to listen in the port 5000
 EXPOSE 8000
 
 # run

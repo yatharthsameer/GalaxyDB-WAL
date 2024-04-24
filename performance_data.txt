@@ -1,3 +1,3 @@
-4 Shards, 6 Servers, 3 Replicas - Write Time: 4.9483, Read Time: 4.6262
-4 Shards, 6 Servers, 6 Replicas - Write Time: 3.4371, Read Time: 4.5262 
-6 Shards, 10 Servers, 8 Replicas - Write Time: 4.8064, Read Time: 5.1971
+4 Shards, 6 Servers, 3 Replicas - Write Time: 20.695126056671143, Read Time: 4.1833403
+4 Shards, 6 Servers, 6 Replicas - Write Time: 21.82943606376648, Read Time: 4.1337767
+6 Shards, 10 Servers, 8 Replicas - Write Time: 20.47661066055298, Read Time: 3.674331

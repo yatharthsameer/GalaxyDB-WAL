@@ -56,24 +56,24 @@ Below are the results showing the read and write times for each configuration. T
 
 ### Configuration 1: 4 Shards, 6 Servers, 3 Replicas
 
-- Write Time: 19.669931411743164 seconds
-- Read Time: 46.548974 seconds
+- Write Time: 4.9483 seconds
+- Read Time: 4.6262 seconds
 
 
 ### Configuration 2: 4 Shards, 6 Servers, 6 Replicas
 
-- Write Time: 19.338212728500366 seconds
-- Read Time: 45.148845 seconds
+- Write Time: 3.4371 seconds
+- Read Time: 4.5262 seconds
 
 
 ### Configuration 3: 6 Shards, 10 Servers, 8 Replicas
 
-- Write Time: 27.32351040840149 seconds
-- Read Time: 44.686055 seconds
+- Write Time: 4.8064 seconds
+- Read Time: 5.1971 seconds
 
 
 
 ### Combined:
 
-![Write Performance for Configuration 3](testing/images/A3_write_perf.png)
-![Read Performance for Configuration 3](testing/images/A3_read_perf.png)
+![Write Performance for Configuration 3](testing/images/write_1.png)
+![Read Performance for Configuration 3](testing/images/read_1.png)

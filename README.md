@@ -75,5 +75,5 @@ Below are the results showing the read and write times for each configuration. T
 
 ### Combined:
 
-![Write Performance for Configuration 3](testing/images/write_1.png)
-![Read Performance for Configuration 3](testing/images/read_1.png)
+![Write Performance for Configuration 3](testing/images/writeFinal.png)
+![Read Performance for Configuration 3](testing/images/readFinal.png)

@@ -39,7 +39,8 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 		for _, shardID := range shardIDs {
 			_, err := db.Exec("INSERT INTO mapt (shard_id, server_id) VALUES ($1, $2);", shardID, serverID)
 			if err != nil {
-				log.Fatal(err)
+				http.Error(w, fmt.Sprintf("Error creating mapt entry: %v", err), http.StatusInternalServerError)
+				return
 			}
 		}
 
@@ -50,7 +51,8 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 
 		_, err := http.Post(galaxy.SHARD_MANAGER_URL+"/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
 		if err != nil {
-			log.Println("Error checking heartbeat:", err)
+			http.Error(w, fmt.Sprintf("Error starting check heartbeat: %v", err), http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -59,7 +61,8 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 	for _, shard := range req.Shards {
 		_, err := db.Exec("INSERT INTO shardt (stud_id_low, shard_id, shard_size, valid_idx) VALUES ($1, $2, $3, $4);", shard.StudIDLow, shard.ShardID, shard.ShardSize, 0)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error creating shardt entry: %v", err), http.StatusInternalServerError)
+			return
 		}
 
 		config := shardTConfigs[shard.ShardID]
@@ -70,7 +73,8 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 		shardTConfigs[shard.ShardID].CHM.Init()
 		rows, err := db.Query("SELECT server_id FROM mapt WHERE shard_id = $1;", shard.ShardID)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error getting mapt entry: %v", err), http.StatusInternalServerError)
+			return
 		}
 		defer rows.Close()
 
@@ -78,7 +82,8 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 			var serverID int
 			err = rows.Scan(&serverID)
 			if err != nil {
-				log.Fatal(err)
+				http.Error(w, fmt.Sprintf("Error scanning row: %v", err), http.StatusInternalServerError)
+				return
 			}
 			shardTConfigs[shard.ShardID].CHM.AddServer(serverID)
 		}
@@ -92,13 +97,14 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatalln("Error marshaling JSON: ", err)
+		http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	_, err = http.Post(galaxy.SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
 	if err != nil {
-		log.Println("Error electing primary:", err)
+		http.Error(w, fmt.Sprintf("Error electing primary: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -115,7 +121,8 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 
 		rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id = $1;", serverID)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error getting mapt entry: %v", err), http.StatusInternalServerError)
+			return
 		}
 		defer rows.Close()
 
@@ -123,7 +130,8 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 			var shardID string
 			err = rows.Scan(&shardID)
 			if err != nil {
-				log.Fatal(err)
+				http.Error(w, fmt.Sprintf("Error scanning row: %v", err), http.StatusInternalServerError)
+				return
 			}
 			servers[serverName] = append(servers[serverName], shardID)
 		}
@@ -132,7 +140,8 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 	shards := []galaxy.Shard{}
 	rows, err := db.Query("SELECT stud_id_low, shard_id, shard_size FROM shardt;")
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, fmt.Sprintf("Error getting shardt entry: %v", err), http.StatusInternalServerError)
+		return
 	}
 	defer rows.Close()
 
@@ -140,7 +149,8 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		var shard galaxy.Shard
 		err = rows.Scan(&shard.StudIDLow, &shard.ShardID, &shard.ShardSize)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error scanning row: %v", err), http.StatusInternalServerError)
+			return
 		}
 		shards = append(shards, shard)
 	}
@@ -184,7 +194,8 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 		for _, shardID := range shardIDs {
 			_, err := db.Exec("INSERT INTO mapt (shard_id, server_id) VALUES ($1, $2);", shardID, serverID)
 			if err != nil {
-				log.Fatal(err)
+				http.Error(w, fmt.Sprintf("Error creating mapt entry: %v", err), http.StatusInternalServerError)
+				return
 			}
 		}
 
@@ -195,7 +206,8 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 
 		_, err := http.Post(galaxy.SHARD_MANAGER_URL+"/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
 		if err != nil {
-			log.Println("Error checking heartbeat:", err)
+			http.Error(w, fmt.Sprintf("Error checking heartbeat: %v", err), http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -204,7 +216,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 	for _, shard := range req.NewShards {
 		_, err := db.Exec("INSERT INTO shardt (stud_id_low, shard_id, shard_size, valid_idx) VALUES ($1, $2, $3, $4);", shard.StudIDLow, shard.ShardID, shard.ShardSize, 0)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error creating shardt entry: %v", err), http.StatusInternalServerError)
 		}
 
 		config := shardTConfigs[shard.ShardID]
@@ -215,7 +227,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 		shardTConfigs[shard.ShardID].CHM.Init()
 		rows, err := db.Query("SELECT server_id FROM mapt WHERE shard_id = $1;", shard.ShardID)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error getting mapt entry: %v", err), http.StatusInternalServerError)
 		}
 		defer rows.Close()
 
@@ -223,7 +235,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 			var serverID int
 			err = rows.Scan(&serverID)
 			if err != nil {
-				log.Fatal(err)
+				http.Error(w, fmt.Sprintf("Error scanning row: %v", err), http.StatusInternalServerError)
 			}
 			shardTConfigs[shard.ShardID].CHM.AddServer(serverID)
 		}
@@ -237,13 +249,14 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatalln("Error marshaling JSON: ", err)
+		http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	_, err = http.Post(galaxy.SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
 	if err != nil {
-		log.Println("Error electing primary:", err)
+		http.Error(w, fmt.Sprintf("Error electing primary: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	addServerMessage := "Add "
@@ -304,7 +317,7 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 		shardIDsRemoved := []string{}
 		rows, err := db.Query("SELECT shard_id, is_primary FROM mapt WHERE server_id = $1;", serverIDRemoved)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error getting mapt entry: %v", err), http.StatusInternalServerError)
 		}
 		defer rows.Close()
 
@@ -313,7 +326,7 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 			isPrimary := false
 			err = rows.Scan(&shardID, &isPrimary)
 			if err != nil {
-				log.Fatal(err)
+				http.Error(w, fmt.Sprintf("Error scanning row: %v", err), http.StatusInternalServerError)
 			}
 			shardIDsRemoved = append(shardIDsRemoved, shardID)
 			if isPrimary {
@@ -327,7 +340,7 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 
 		_, err = db.Exec("DELETE FROM mapt WHERE server_id = $1;", serverIDRemoved)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error deleting mapt entry: %v", err), http.StatusInternalServerError)
 		}
 	}
 
@@ -360,13 +373,14 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatalln("Error marshaling JSON: ", err)
+		http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	_, err = http.Post(galaxy.SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
 	if err != nil {
-		log.Println("Error electing primary:", err)
+		http.Error(w, fmt.Sprintf("Error electing primary %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	response := galaxy.RemoveResponseSuccess{
@@ -397,7 +411,8 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 	shardIDsQueried := []string{}
 	rows, err := db.Query("SELECT shard_id FROM shardt WHERE (stud_id_low BETWEEN $1 AND $2) OR (stud_id_low+shard_size BETWEEN $1 AND $2);", req.StudID.Low, req.StudID.High)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, fmt.Sprintf("Error getting shardt entry: %v", err), http.StatusInternalServerError)
+		return
 	}
 	defer rows.Close()
 
@@ -405,7 +420,8 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 		var shardID string
 		err = rows.Scan(&shardID)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error scanning rows: %v", err), http.StatusInternalServerError)
+			return
 		}
 		shardIDsQueried = append(shardIDsQueried, shardID)
 	}
@@ -418,7 +434,7 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		payloadData, err := json.Marshal(payload)
 		if err != nil {
-			log.Fatalln("Error marshaling JSON: ", err)
+			http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
 			return
 		}
 
@@ -426,13 +442,13 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 
 		resp, err := http.Post("http://"+galaxy.GetServerIP(fmt.Sprintf("Server%d", serverID))+":"+fmt.Sprint(galaxy.SERVER_PORT)+"/read", "application/json", bytes.NewBuffer(payloadData))
 		if err != nil {
-			log.Println("Error reading from Server:", err)
+			http.Error(w, fmt.Sprintf("Error reading from server: %v", err), http.StatusInternalServerError)
 			return
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Println("Error reading response body:", err)
+			http.Error(w, fmt.Sprintf("Error reading response body: %v", err), http.StatusInternalServerError)
 		}
 
 		var respData galaxy.ServerReadResponse
@@ -537,7 +553,7 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatalln("Error marshaling JSON: ", err)
+		http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -545,13 +561,13 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	for _, serverID := range serverIDs {
 		req, err := http.NewRequest("PUT", "http://"+galaxy.GetServerIP(fmt.Sprintf("Server%d", serverID))+":"+fmt.Sprint(galaxy.SERVER_PORT)+"/update", bytes.NewBuffer(payloadData))
 		if err != nil {
-			log.Println("Error updating Server:", err)
+			http.Error(w, fmt.Sprintf("Error creating server request: %v", err), http.StatusInternalServerError)
 			return
 		}
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Println("Error updating Server:", err)
+			http.Error(w, fmt.Sprintf("Error updating server: %v", err), http.StatusInternalServerError)
 			return
 		}
 		resp.Body.Close()
@@ -589,7 +605,7 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatalln("Error marshaling JSON: ", err)
+		http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -597,13 +613,13 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 	for _, serverID := range serverIDs {
 		req, err := http.NewRequest("DELETE", "http://"+galaxy.GetServerIP(fmt.Sprintf("Server%d", serverID))+":"+fmt.Sprint(galaxy.SERVER_PORT)+"/delete", bytes.NewBuffer(payloadData))
 		if err != nil {
-			log.Println("Error deleting from Server:", err)
+			http.Error(w, fmt.Sprintf("Error creating server request: %v", err), http.StatusInternalServerError)
 			return
 		}
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Println("Error deleting from Server:", err)
+			http.Error(w, fmt.Sprintf("Error deleting from server: %v", err), http.StatusInternalServerError)
 			return
 		}
 		resp.Body.Close()

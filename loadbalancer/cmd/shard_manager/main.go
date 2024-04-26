@@ -27,7 +27,7 @@ var (
 func getServerIDs() []int {
 	resp, err := http.Get(galaxy.LOADBALANCER_URL + "/serverids")
 	if err != nil {
-		log.Fatal(err)
+		log.Println("Error getting servers list from loadbalancer:", err)
 	}
 	defer resp.Body.Close()
 
@@ -60,13 +60,13 @@ func checkHeartbeat(serverID int, serverDown chan<- int) {
 		}
 		serverIP := galaxy.GetServerIP(fmt.Sprintf("Server%d", serverID))
 		if len(serverIP) == 0 {
-			fmt.Printf("Server%d is down!\n", serverID)
+			log.Println("Server", serverID, " is down!")
 			serverDown <- serverID
 			return
 		}
 		resp, err := http.Get("http://" + serverIP + ":" + fmt.Sprint(galaxy.SERVER_PORT) + "/heartbeat")
 		if err != nil || resp.StatusCode != http.StatusOK {
-			fmt.Printf("Server%d is down!\n", serverID)
+			log.Println("Server", serverID, " is down!")
 			serverDown <- serverID
 			return
 		}
@@ -136,7 +136,7 @@ func shardServersHandler(w http.ResponseWriter, r *http.Request) {
 	var servers []int
 	rows, err := db.Query("SELECT server_id FROM MapT WHERE shard_id = $1;", req.ShardID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error running sql query to get servers for a shard: %v", err), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Error running sql query to get servers for a shard: %v", err), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -145,7 +145,7 @@ func shardServersHandler(w http.ResponseWriter, r *http.Request) {
 		var server int
 		err := rows.Scan(&server)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Error reading sql result: %v", err), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf("Error reading sql result: %v", err), http.StatusInternalServerError)
 			return
 		}
 		servers = append(servers, server)
@@ -154,7 +154,7 @@ func shardServersHandler(w http.ResponseWriter, r *http.Request) {
 	var primary int
 	err = db.QueryRow("SELECT server_id FROM MapT WHERE shard_id = $1 and is_primary = TRUE;", req.ShardID).Scan(&primary)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error running sql query to get a primary server: %v", err), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Error running sql query to get a primary server: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -183,7 +183,8 @@ func primaryElectHandler(w http.ResponseWriter, r *http.Request) {
 	for _, shard := range req.ShardIDs {
 		rows, err := db.Query("SELECT server_id FROM MapT WHERE shard_id = $1;", shard)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error getting mapt entry: %v", err), http.StatusInternalServerError)
+			return
 		}
 		defer rows.Close()
 
@@ -194,7 +195,8 @@ func primaryElectHandler(w http.ResponseWriter, r *http.Request) {
 			var server int
 			err := rows.Scan(&server)
 			if err != nil {
-				log.Fatal(err)
+				http.Error(w, fmt.Sprintf("Errorscanning rows: %v", err), http.StatusInternalServerError)
+				return
 			}
 
 			walLength := galaxy.GetServerWalLength(server)

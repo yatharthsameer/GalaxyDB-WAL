@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -30,8 +28,7 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 	var reqBody ConfigPayload
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "Error decoding JSON: %v", err)
+		http.Error(w, fmt.Sprintf("Error decoding JSON: %v", err), http.StatusBadRequest)
 		return
 	}
 
@@ -58,7 +55,8 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 		query += ")"
 		_, err = db.Exec(query)
 		if err != nil {
-			log.Fatalf("error creating table: %s", err)
+			http.Error(w, fmt.Sprintf("Error creating table: %v", err), http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -84,8 +82,7 @@ func copyHandler(w http.ResponseWriter, r *http.Request) {
 	var reqBody CopyRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "Error decoding JSON: %v", err)
+		http.Error(w, fmt.Sprintf("Error decoding JSON: %v", err), http.StatusBadRequest)
 		return
 	}
 
@@ -95,8 +92,7 @@ func copyHandler(w http.ResponseWriter, r *http.Request) {
 		query := fmt.Sprintf("SELECT Stud_id, Stud_name, Stud_marks FROM %s", shard)
 		data, err := fetchDataFromShard(db, query)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "Error fetching data from shard %s: %v", shard, err)
+			http.Error(w, fmt.Sprintf("Error fetching data from shard %s: %v", shard, err), http.StatusInternalServerError)
 			return
 		}
 		resp[shard] = data
@@ -144,8 +140,7 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 	var reqBody ReadRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "Error decoding JSON: %v", err)
+		http.Error(w, "Error decoding JSON", http.StatusBadRequest)
 		return
 	}
 
@@ -154,8 +149,7 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 
 	data, err := fetchDataFromShard(db, query)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Error reading data from shard %s: %v", shard, err)
+		http.Error(w, fmt.Sprintf("Error fetching data from shard %s: %v", shard, err), http.StatusInternalServerError)
 		return
 	}
 
@@ -169,71 +163,6 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func synReplication(shard string, reqBody Requester, reqMethod string, route string, w http.ResponseWriter) {
-	payload := ShardServersRequest{
-		ShardID: shard,
-	}
-
-	payloadData, err := json.Marshal(payload)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	req, err := http.NewRequest("GET", SHARD_MANAGER_URL+"/shard_servers", bytes.NewBuffer(payloadData))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error creating request for shard manager: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error sending request to shard manager: %v", err), http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error reading response body: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	var shardServers ShardServersResponse
-	err = json.Unmarshal(body, &shardServers)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error unmarshaling JSON: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if err := writeToWAL(reqBody); err != nil {
-		http.Error(w, fmt.Sprintf("Error writing to WAL: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if isPrimary(shardServers.Primary) {
-
-		var secondaries []int
-		for _, server := range shardServers.ServerIDs {
-			if server != shardServers.Primary {
-				secondaries = append(secondaries, server)
-			}
-		}
-
-		acks, err := replicateToSecondaries(reqBody, reqMethod, route, secondaries)
-		if err != nil {
-			http.Error(w, "Error replicating to secondaries", http.StatusInternalServerError)
-			return
-		}
-
-		if !receivedMajorityAck(acks) {
-			http.Error(w, "Did not receive majority acknowledgments", http.StatusInternalServerError)
-			return
-		}
-	}
-}
-
 func updateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		http.Error(w, "Method not supported", http.StatusMethodNotAllowed)
@@ -243,8 +172,7 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	var reqBody UpdateRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "Error decoding JSON: %v", err)
+		http.Error(w, "Error decoding JSON", http.StatusBadRequest)
 		return
 	}
 
@@ -254,8 +182,7 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec(query, reqBody.Data.StudentMarks, reqBody.StudID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Error updating data in shard %s for Stud_id %d: %v", shard, reqBody.StudID, err)
+		http.Error(w, fmt.Sprintf("Error updating data in shard %s for Stud_id %d: %v", shard, reqBody.StudID, err), http.StatusInternalServerError)
 		return
 	}
 
@@ -276,8 +203,7 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 	var reqBody DeleteRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "Error decoding JSON: %v", err)
+		http.Error(w, "Error decoding JSON", http.StatusBadRequest)
 		return
 	}
 
@@ -287,8 +213,7 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec(query, reqBody.StudID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Error deleting data in shard %s for Stud_id %d: %v", reqBody.Shard, reqBody.StudID, err)
+		http.Error(w, fmt.Sprintf("Error deleting data in shard %s for Stud_id %d: %v", reqBody.Shard, reqBody.StudID, err), http.StatusInternalServerError)
 		return
 	}
 
@@ -334,13 +259,12 @@ func main() {
 	http.HandleFunc("/delete", deleteHandler)
 	http.HandleFunc("/wal_length", walLengthHandler)
 
-	fmt.Println("Starting server on port 5000")
+	log.Println("Starting server on port 5000")
 	err = http.ListenAndServe(":5000", nil)
 
 	if errors.Is(err, http.ErrServerClosed) {
-		fmt.Printf("server closed\n")
+		log.Println("Server closed gracefully")
 	} else if err != nil {
-		fmt.Printf("error starting server: %s\n", err)
-		panic(err)
+		log.Fatalf("error starting server: %s\n", err)
 	}
 }

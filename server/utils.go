@@ -213,6 +213,72 @@ func getWalLength() int {
 	lines, err := lineCounter(file)
 	if err != nil {
 		log.Println("Error while fetching wal file length: " + err.Error())
+		return -1
 	}
 	return lines
+}
+
+func synReplication(shard string, reqBody Requester, reqMethod string, route string, w http.ResponseWriter) {
+	payload := ShardServersRequest{
+		ShardID: shard,
+	}
+
+	payloadData, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	req, err := http.NewRequest("GET", SHARD_MANAGER_URL+"/shard_servers", bytes.NewBuffer(payloadData))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error creating request for shard manager: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error sending request to shard manager: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error reading response body: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	var shardServers ShardServersResponse
+	err = json.Unmarshal(body, &shardServers)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error unmarshaling JSON: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if err := writeToWAL(reqBody); err != nil {
+		http.Error(w, fmt.Sprintf("Error writing to WAL: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if isPrimary(shardServers.Primary) {
+
+		var secondaries []int
+		for _, server := range shardServers.ServerIDs {
+			if server != shardServers.Primary {
+				secondaries = append(secondaries, server)
+			}
+		}
+
+		acks, err := replicateToSecondaries(reqBody, reqMethod, route, secondaries)
+		if err != nil {
+			http.Error(w, "Error replicating to secondaries", http.StatusInternalServerError)
+			return
+		}
+
+		if !receivedMajorityAck(acks) {
+			http.Error(w, "Did not receive majority acknowledgments", http.StatusInternalServerError)
+			return
+		}
+	}
 }

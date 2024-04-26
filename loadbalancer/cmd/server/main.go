@@ -480,7 +480,7 @@ func WriteHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		payloadData, err := json.Marshal(payload)
 		if err != nil {
-			log.Fatalln("Error marshaling JSON: ", err)
+			http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
 			return
 		}
 
@@ -488,13 +488,13 @@ func WriteHandler(w http.ResponseWriter, r *http.Request) {
 		for _, serverID := range serverIDs {
 			resp, err := http.Post("http://"+galaxy.GetServerIP(fmt.Sprintf("Server%d", serverID))+":"+fmt.Sprint(galaxy.SERVER_PORT)+"/write", "application/json", bytes.NewBuffer(payloadData))
 			if err != nil {
-				log.Println("Error writing to Server:", err)
+				http.Error(w, fmt.Sprintf("Error writing %s record to Server%d: %v", shardID, serverID, err), http.StatusInternalServerError)
 				return
 			}
 
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				log.Println("Error reading response body:", err)
+				log.Printf("Error reading response body from Server%d: %v\n", serverID, err)
 			}
 
 			var respData galaxy.ServerWriteResponse

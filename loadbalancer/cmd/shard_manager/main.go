@@ -136,7 +136,8 @@ func shardServersHandler(w http.ResponseWriter, r *http.Request) {
 	var servers []int
 	rows, err := db.Query("SELECT server_id FROM MapT WHERE shard_id = $1;", req.ShardID)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, fmt.Sprintf("Error running sql query to get servers for a shard: %v", err), http.StatusBadRequest)
+		return
 	}
 	defer rows.Close()
 
@@ -144,7 +145,8 @@ func shardServersHandler(w http.ResponseWriter, r *http.Request) {
 		var server int
 		err := rows.Scan(&server)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error reading sql result: %v", err), http.StatusBadRequest)
+			return
 		}
 		servers = append(servers, server)
 	}
@@ -152,7 +154,8 @@ func shardServersHandler(w http.ResponseWriter, r *http.Request) {
 	var primary int
 	err = db.QueryRow("SELECT server_id FROM MapT WHERE shard_id = $1 and is_primary = TRUE;", req.ShardID).Scan(&primary)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, fmt.Sprintf("Error running sql query to get a primary server: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	response := galaxy.ShardServersResponse{
@@ -195,11 +198,13 @@ func primaryElectHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			walLength := galaxy.GetServerWalLength(server)
-			if walLength > maxWalLength {
+			if walLength >= maxWalLength {
 				maxWalLength = walLength
 				primaryServer = server
 			}
 		}
+
+		log.Println("Setting primary server for", shard, "as Server", primaryServer)
 
 		_, err = db.Exec("UPDATE MapT SET is_primary = TRUE WHERE shard_id = $1 AND server_id = $2;", shard, primaryServer)
 		if err != nil {

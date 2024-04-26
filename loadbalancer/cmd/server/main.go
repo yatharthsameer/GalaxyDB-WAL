@@ -21,7 +21,6 @@ var (
 	shardTConfigs map[string]galaxy.ShardTConfig
 	serverIDs     []int
 	db            *sql.DB
-	serverDown    chan int
 )
 
 func initHandler(w http.ResponseWriter, r *http.Request) {
@@ -46,10 +45,19 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 
 		serverIDs = append(serverIDs, serverID)
 
-		galaxy.SpawnNewServerInstance(fmt.Sprintf("Server%d", serverID), serverID)
-		galaxy.ConfigNewServerInstance(serverID, shardIDs)
+		err := galaxy.SpawnNewServerInstance(fmt.Sprintf("Server%d", serverID), serverID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error spawning new server: %v", err), http.StatusInternalServerError)
+			return
+		}
 
-		_, err := http.Post(galaxy.SHARD_MANAGER_URL+"/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
+		err = galaxy.ConfigNewServerInstance(serverID, shardIDs)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error configuring new server: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		_, err = http.Post(galaxy.SHARD_MANAGER_URL+"/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Error starting check heartbeat: %v", err), http.StatusInternalServerError)
 			return
@@ -201,10 +209,19 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 
 		serverIDs = append(serverIDs, serverID)
 
-		galaxy.SpawnNewServerInstance(fmt.Sprintf("Server%d", serverID), serverID)
-		galaxy.ConfigNewServerInstance(serverID, shardIDs)
+		err := galaxy.SpawnNewServerInstance(fmt.Sprintf("Server%d", serverID), serverID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error spawning new server: %v", err), http.StatusInternalServerError)
+			return
+		}
 
-		_, err := http.Post(galaxy.SHARD_MANAGER_URL+"/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
+		err = galaxy.ConfigNewServerInstance(serverID, shardIDs)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error configuring new server: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		_, err = http.Post(galaxy.SHARD_MANAGER_URL+"/check_heartbeat", "application/json", bytes.NewBuffer([]byte(fmt.Sprint(serverID))))
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Error checking heartbeat: %v", err), http.StatusInternalServerError)
 			return
@@ -217,6 +234,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 		_, err := db.Exec("INSERT INTO shardt (stud_id_low, shard_id, shard_size, valid_idx) VALUES ($1, $2, $3, $4);", shard.StudIDLow, shard.ShardID, shard.ShardSize, 0)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Error creating shardt entry: %v", err), http.StatusInternalServerError)
+			return
 		}
 
 		config := shardTConfigs[shard.ShardID]
@@ -228,6 +246,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 		rows, err := db.Query("SELECT server_id FROM mapt WHERE shard_id = $1;", shard.ShardID)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Error getting mapt entry: %v", err), http.StatusInternalServerError)
+			return
 		}
 		defer rows.Close()
 
@@ -236,6 +255,7 @@ func addServersHandler(w http.ResponseWriter, r *http.Request) {
 			err = rows.Scan(&serverID)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("Error scanning row: %v", err), http.StatusInternalServerError)
+				return
 			}
 			shardTConfigs[shard.ShardID].CHM.AddServer(serverID)
 		}
@@ -318,6 +338,7 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 		rows, err := db.Query("SELECT shard_id, is_primary FROM mapt WHERE server_id = $1;", serverIDRemoved)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Error getting mapt entry: %v", err), http.StatusInternalServerError)
+			return
 		}
 		defer rows.Close()
 
@@ -327,6 +348,7 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 			err = rows.Scan(&shardID, &isPrimary)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("Error scanning row: %v", err), http.StatusInternalServerError)
+				return
 			}
 			shardIDsRemoved = append(shardIDsRemoved, shardID)
 			if isPrimary {
@@ -341,6 +363,7 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 		_, err = db.Exec("DELETE FROM mapt WHERE server_id = $1;", serverIDRemoved)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Error deleting mapt entry: %v", err), http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -362,7 +385,11 @@ func removeServersHandler(w http.ResponseWriter, r *http.Request) {
 	serverNamesRemoved := []string{}
 	for _, serverIDRemoved := range serverIDsRemoved {
 		serverNameRemoved := fmt.Sprintf("Server%d", serverIDRemoved)
-		galaxy.RemoveServerInstance(serverNameRemoved)
+		err := galaxy.RemoveServerInstance(serverNameRemoved)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error removing server: %v", err), http.StatusInternalServerError)
+			return
+		}
 
 		serverNamesRemoved = append(serverNamesRemoved, serverNameRemoved)
 	}
@@ -449,6 +476,7 @@ func readHandler(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Error reading response body: %v", err), http.StatusInternalServerError)
+			return
 		}
 
 		var respData galaxy.ServerReadResponse
@@ -483,7 +511,11 @@ func WriteHandler(w http.ResponseWriter, r *http.Request) {
 
 	studDataToWrite := map[string][]galaxy.StudT{}
 	for _, studData := range req.Data {
-		shardID := galaxy.GetShardIDFromStudID(db, studData.StudID)
+		shardID, err := galaxy.GetShardIDFromStudID(db, studData.StudID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error getting shard ID: %v", err), http.StatusInternalServerError)
+			return
+		}
 		studDataToWrite[shardID] = append(studDataToWrite[shardID], studData)
 	}
 
@@ -500,7 +532,11 @@ func WriteHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		serverIDs := galaxy.GetServerIDsForShard(db, shardID)
+		serverIDs, err := galaxy.GetServerIDsForShard(db, shardID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error getting server IDs for shard: %v", err), http.StatusInternalServerError)
+			return
+		}
 		for _, serverID := range serverIDs {
 			resp, err := http.Post("http://"+galaxy.GetServerIP(fmt.Sprintf("Server%d", serverID))+":"+fmt.Sprint(galaxy.SERVER_PORT)+"/write", "application/json", bytes.NewBuffer(payloadData))
 			if err != nil {
@@ -510,7 +546,8 @@ func WriteHandler(w http.ResponseWriter, r *http.Request) {
 
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				log.Printf("Error reading response body from Server%d: %v\n", serverID, err)
+				http.Error(w, fmt.Sprintf("Error reading response body from Server%d: %v", serverID, err), http.StatusInternalServerError)
+				return
 			}
 
 			var respData galaxy.ServerWriteResponse
@@ -543,7 +580,11 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shardID := galaxy.GetShardIDFromStudID(db, req.StudID)
+	shardID, err := galaxy.GetShardIDFromStudID(db, req.StudID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error getting shard ID: %v", err), http.StatusInternalServerError)
+		return
+	}
 	shardTConfigs[shardID].Mutex.Lock()
 
 	payload := galaxy.ServerUpdatePayload{
@@ -551,13 +592,18 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 		StudID: req.StudID,
 		Data:   req.Data,
 	}
+
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error marshaling JSON: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	serverIDs := galaxy.GetServerIDsForShard(db, shardID)
+	serverIDs, err := galaxy.GetServerIDsForShard(db, shardID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error getting server IDs for shard: %v", err), http.StatusInternalServerError)
+		return
+	}
 	for _, serverID := range serverIDs {
 		req, err := http.NewRequest("PUT", "http://"+galaxy.GetServerIP(fmt.Sprintf("Server%d", serverID))+":"+fmt.Sprint(galaxy.SERVER_PORT)+"/update", bytes.NewBuffer(payloadData))
 		if err != nil {
@@ -596,7 +642,11 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shardID := galaxy.GetShardIDFromStudID(db, req.StudID)
+	shardID, err := galaxy.GetShardIDFromStudID(db, req.StudID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error getting shard ID: %v", err), http.StatusInternalServerError)
+		return
+	}
 	shardTConfigs[shardID].Mutex.Lock()
 
 	payload := galaxy.ServerDeletePayload{
@@ -609,7 +659,11 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serverIDs := galaxy.GetServerIDsForShard(db, shardID)
+	serverIDs, err := galaxy.GetServerIDsForShard(db, shardID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error getting server IDs for shard: %v", err), http.StatusInternalServerError)
+		return
+	}
 	for _, serverID := range serverIDs {
 		req, err := http.NewRequest("DELETE", "http://"+galaxy.GetServerIP(fmt.Sprintf("Server%d", serverID))+":"+fmt.Sprint(galaxy.SERVER_PORT)+"/delete", bytes.NewBuffer(payloadData))
 		if err != nil {
@@ -650,8 +704,13 @@ func replaceServerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serverIDs = galaxy.ReplaceServerInstance(db, req.DownServerID, req.NewServerID, serverIDs, shardTConfigs)
+	newServerIDs, err := galaxy.ReplaceServerInstance(db, req.DownServerID, req.NewServerID, serverIDs, shardTConfigs)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error replacing server: %v", err), http.StatusInternalServerError)
+		return
+	}
 
+	serverIDs = newServerIDs
 	w.WriteHeader(http.StatusOK)
 }
 

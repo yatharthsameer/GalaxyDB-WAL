@@ -36,7 +36,7 @@ func GetServerID(rawServerName string) int {
 	return serverID
 }
 
-func BuildServerInstance() {
+func BuildServerInstance() error {
 	env := os.Getenv("GO_ENV")
 	var serverPath string
 	if env == "production" {
@@ -48,60 +48,61 @@ func BuildServerInstance() {
 	cmd := exec.Command("sudo", "docker", "build", "--tag", SERVER_DOCKER_IMAGE_NAME, serverPath)
 	err := cmd.Run()
 	if err != nil {
-		log.Fatalln("Failed to build server image: ", err)
+		return fmt.Errorf("failed to build server image: %v", err)
 	} else {
 		log.Println("Server image built successfully")
+		return nil
 	}
 }
 
-func SpawnNewServerInstance(hostname string, id int) {
+func SpawnNewServerInstance(hostname string, id int) error {
 	cmd := exec.Command("sudo", "docker", "run", "--rm", "-d", "--name", hostname, "--network", DOCKER_NETWORK_NAME, "-e", fmt.Sprintf("id=%d", id), fmt.Sprintf("%s:latest", SERVER_DOCKER_IMAGE_NAME))
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Fatalf("Failed to start new server instance: %v, stderr: %s", err, stderr.String())
+		return fmt.Errorf("failed to start new server instance: %v, stderr: %s", err, stderr.String())
 	}
+	return nil
 }
 
 func GetServerIP(hostname string) string {
 	cmd := exec.Command("sudo", "docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", hostname)
 	output, err := cmd.Output()
 	if err != nil {
-		log.Println("Error running docker inspect: ", err)
+		log.Printf("failed to get IP for server '%s': %v\n", hostname, err)
 		return ""
 	}
 
 	return strings.TrimSpace(string(output))
 }
 
-func ConfigNewServerInstance(serverID int, shards []string) {
+func ConfigNewServerInstance(serverID int, shards []string) error {
 	payload := ServerConfigPayload{
 		Schema: GetSchemaConfig(),
 		Shards: shards,
 	}
 	payloadData, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatalln("Error marshaling JSON: ", err)
-		return
+		return fmt.Errorf("error marshaling JSON: %v", err)
 	}
 
 	resp, err := http.Post("http://"+GetServerIP(fmt.Sprintf("Server%d", serverID))+":"+fmt.Sprint(SERVER_PORT)+"/config", "application/json", bytes.NewBuffer(payloadData))
 	if err != nil {
-		log.Println("Error configuring Server:", err)
-		return
+		return fmt.Errorf("error configuring Server: %v", err)
 	}
 	defer resp.Body.Close()
+	return nil
 }
 
-func RemoveServerInstance(hostname string) {
+func RemoveServerInstance(hostname string) error {
 	cmd := exec.Command("sudo", "docker", "stop", hostname)
 	err := cmd.Run()
 	if err != nil {
-		log.Fatalf("Failed to stop server instance '%s': %v\n", hostname, err)
-		return
+		return fmt.Errorf("failed to stop server instance '%s': %v", hostname, err)
 	}
+	return nil
 }
 
 func CleanupServers(serverIDs []int) {
@@ -138,10 +139,10 @@ func ChooseRandomServerForRemoval(serverIDs []int, serverIDsRemoved []int) int {
 	return serverIDsAvailable[index]
 }
 
-func GetShardIDFromStudID(db *sql.DB, studID int) string {
+func GetShardIDFromStudID(db *sql.DB, studID int) (string, error) {
 	row, err := db.Query("SELECT shard_id FROM shardt WHERE $1 BETWEEN stud_id_low AND stud_id_low+shard_size", studID)
 	if err != nil {
-		log.Fatal(err)
+		return "", fmt.Errorf("error querying shardt: %v", err)
 	}
 	defer row.Close()
 
@@ -149,17 +150,17 @@ func GetShardIDFromStudID(db *sql.DB, studID int) string {
 	for row.Next() {
 		err := row.Scan(&shardID)
 		if err != nil {
-			log.Fatal(err)
+			return "", fmt.Errorf("error scanning row: %v", err)
 		}
 	}
 
-	return shardID
+	return shardID, nil
 }
 
-func GetValidIDx(db *sql.DB, shardID string) int {
+func GetValidIDx(db *sql.DB, shardID string) (int, error) {
 	row, err := db.Query("SELECT valid_idx FROM shardt WHERE shard_id=$1", shardID)
 	if err != nil {
-		log.Fatal(err)
+		return -1, fmt.Errorf("error querying shardt: %v", err)
 	}
 	defer row.Close()
 
@@ -167,17 +168,17 @@ func GetValidIDx(db *sql.DB, shardID string) int {
 	for row.Next() {
 		err := row.Scan(&validIDx)
 		if err != nil {
-			log.Fatal(err)
+			return -1, fmt.Errorf("error scanning row: %v", err)
 		}
 	}
 
-	return validIDx
+	return validIDx, nil
 }
 
-func GetServerIDsForShard(db *sql.DB, shardID string) []int {
+func GetServerIDsForShard(db *sql.DB, shardID string) ([]int, error) {
 	row, err := db.Query("SELECT server_id FROM mapt WHERE shard_id=$1", shardID)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("error querying mapt: %v", err)
 	}
 	defer row.Close()
 
@@ -186,20 +187,23 @@ func GetServerIDsForShard(db *sql.DB, shardID string) []int {
 	for row.Next() {
 		err := row.Scan(&serverID)
 		if err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
 		serverIDs = append(serverIDs, serverID)
 	}
 
-	return serverIDs
+	return serverIDs, nil
 }
 
-func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, serverIDs []int, shardTConfigs map[string]ShardTConfig) []int {
-	SpawnNewServerInstance(fmt.Sprintf("Server%d", newServerID), newServerID)
+func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, serverIDs []int, shardTConfigs map[string]ShardTConfig) ([]int, error) {
+	err := SpawnNewServerInstance(fmt.Sprintf("Server%d", newServerID), newServerID)
+	if err != nil {
+		return nil, fmt.Errorf("error spawning new server: %v", err)
+	}
 
 	rows, err := db.Query("SELECT shard_id FROM mapt WHERE server_id=$1", downServerID)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("error querying mapt: %v", err)
 	}
 
 	shardIDs := []string{}
@@ -207,13 +211,16 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 		var shardID string
 		err := rows.Scan(&shardID)
 		if err != nil {
-			log.Fatal(err)
+			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
 		shardIDs = append(shardIDs, shardID)
 	}
 	rows.Close()
 
-	ConfigNewServerInstance(newServerID, shardIDs)
+	err = ConfigNewServerInstance(newServerID, shardIDs)
+	if err != nil {
+		return nil, fmt.Errorf("error configuring new server: %v", err)
+	}
 
 	primaryShardList := []string{}
 
@@ -226,24 +233,24 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 		}
 		payloadData, err := json.Marshal(payload)
 		if err != nil {
-			log.Println("Error marshaling JSON: ", err)
+			return nil, fmt.Errorf("error marshaling JSON: %v", err)
 		}
 
 		existingServerID := shardTConfigs[shardID].CHM.GetServerForRequest(GetRandomID())
 
 		req, err := http.NewRequest("GET", "http://"+GetServerIP(fmt.Sprintf("Server%d", existingServerID))+":"+fmt.Sprint(SERVER_PORT)+"/copy", bytes.NewBuffer(payloadData))
 		if err != nil {
-			log.Println("Error copying from Server:", err)
+			return nil, fmt.Errorf("error creating request: %v", err)
 		}
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Println("Error copying from Server:", err)
+			return nil, fmt.Errorf("error copying from server: %v", err)
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Println("Error reading response body:", err)
+			return nil, fmt.Errorf("error reading response body: %v", err)
 		}
 
 		var respData ServerCopyResponse
@@ -258,12 +265,12 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 		}
 		payloadData, err = json.Marshal(payloadWrite)
 		if err != nil {
-			log.Println("Error marshaling JSON: ", err)
+			return nil, fmt.Errorf("error marshaling JSON: %v", err)
 		}
 
 		_, err = http.Post("http://"+GetServerIP(fmt.Sprintf("Server%d", newServerID))+":"+fmt.Sprint(SERVER_PORT)+"/write", "application/json", bytes.NewBuffer(payloadData))
 		if err != nil {
-			log.Println("Error writing to Server:", err)
+			return nil, fmt.Errorf("error writing to new server: %v", err)
 		}
 
 		shardTConfigs[shardID].CHM.AddServer(newServerID)
@@ -273,7 +280,7 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 		isPrimary := false
 		err = row.Scan(&isPrimary)
 		if err != nil {
-			log.Println(err)
+			return nil, fmt.Errorf("error scanning row: %v", err)
 		}
 		if isPrimary {
 			primaryShardList = append(primaryShardList, shardID)
@@ -282,7 +289,7 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 
 	_, err = db.Exec("UPDATE mapt SET server_id=$1, is_primary=FALSE WHERE server_id=$2", newServerID, downServerID)
 	if err != nil {
-		log.Println("Error updating mapt: ", err)
+		return nil, fmt.Errorf("error updating mapt: %v", err)
 	}
 
 	if len(primaryShardList) != 0 {
@@ -292,12 +299,12 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 
 		payloadData, err := json.Marshal(payload)
 		if err != nil {
-			log.Fatalln("Error marshaling JSON: ", err)
+			return nil, fmt.Errorf("error marshaling JSON: %v", err)
 		}
 
 		_, err = http.Post(SHARD_MANAGER_URL+"/primary_elect", "application/json", bytes.NewBuffer(payloadData))
 		if err != nil {
-			log.Println("Error electing primary:", err)
+			return nil, fmt.Errorf("error electing primary: %v", err)
 		}
 	}
 
@@ -309,25 +316,23 @@ func ReplaceServerInstance(db *sql.DB, downServerID int, newServerID int, server
 	}
 	newServerIDs = append(newServerIDs, newServerID)
 
-	return newServerIDs
+	return newServerIDs, nil
 }
 
-func GetServerWalLength(serverID int) int {
+func GetServerWalLength(serverID int) (int, error) {
 	resp, err := http.Get("http://" + GetServerIP(fmt.Sprintf("Server%d", serverID)) + ":" + fmt.Sprint(SERVER_PORT) + "/wal_length")
 	if err != nil {
-		log.Println("Error getting WAL length from Server:", err)
-		return -1
+		return -1, fmt.Errorf("error getting WAL length from Server: %v", err)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("Error reading response body:", err)
-		return -1
+		return -1, fmt.Errorf("error reading response body: %v", err)
 	}
 
 	var walLength int
 	json.Unmarshal(body, &walLength)
 	resp.Body.Close()
 
-	return walLength
+	return walLength, nil
 }

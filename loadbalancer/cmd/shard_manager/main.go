@@ -113,7 +113,8 @@ func checkHeartbeatHandler(w http.ResponseWriter, r *http.Request) {
 	var serverID int
 	err := json.NewDecoder(r.Body).Decode(&serverID)
 	if err != nil {
-		log.Println("Error decoding JSON: ", err)
+		http.Error(w, fmt.Sprintf("Error decoding request: %v", err), http.StatusBadRequest)
+		return
 	}
 
 	go checkHeartbeat(serverID, serverDown)
@@ -195,11 +196,16 @@ func primaryElectHandler(w http.ResponseWriter, r *http.Request) {
 			var server int
 			err := rows.Scan(&server)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("Errorscanning rows: %v", err), http.StatusInternalServerError)
+				http.Error(w, fmt.Sprintf("Error scanning rows: %v", err), http.StatusInternalServerError)
 				return
 			}
 
-			walLength := galaxy.GetServerWalLength(server)
+			walLength, err := galaxy.GetServerWalLength(server)
+			if err != nil {
+				log.Println("Error getting WAL length from Server", server, ":", err)
+				continue
+			}
+
 			if walLength >= maxWalLength {
 				maxWalLength = walLength
 				primaryServer = server
@@ -210,7 +216,8 @@ func primaryElectHandler(w http.ResponseWriter, r *http.Request) {
 
 		_, err = db.Exec("UPDATE MapT SET is_primary = TRUE WHERE shard_id = $1 AND server_id = $2;", shard, primaryServer)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, fmt.Sprintf("Error setting primary: %v", err), http.StatusInternalServerError)
+			return
 		}
 	}
 
